@@ -12,6 +12,24 @@ import {
   citationFor
 } from '../lib/evidence';
 
+/*
+  Selected work, on the same light plate as the rest of the landing page.
+
+  Two things drive the layout:
+
+  1. Light, not dark. The only dark surface left is the media viewport itself — a screenshot or a
+     blueprint is a *screen*, and keeping that one rectangle near-black reads as a device rather
+     than as a dark band cut into a light page. Everything around it uses the light evidence
+     tokens (`lightBg` / `lightBorder` / `onLight`) that WorkPage already ships, so the homepage
+     panel and the portfolio page speak the same language.
+
+  2. One screen, not two. The old arrangement stacked the stage on top of the dossier inside a
+     9-column well, which ran to ~1550px — you could never see a project and its evidence at the
+     same time. Now the index is a horizontal pager, and the stage and the dossier sit side by
+     side (7/5), so the section resolves in ~865px: it fits a 1080p viewport under the sticky
+     header, and nothing is squeezed to get there.
+*/
+
 interface WorkLedgerProps {
   onNavigate: (page: string, param?: string) => void;
 }
@@ -30,44 +48,52 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
   const [filterTier, setFilterTier] = useState<ProjectEvidence | null>(null);
   const [buildOpen, setBuildOpen] = useState<boolean>(false);
   const [revealed, setRevealed] = useState<number>(0);
-  const [stageMouse, setStageMouse] = useState<{ x: number; y: number } | null>(null);
+  const [pointer, setPointer] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
 
   const railRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   /*
-    Stage cursor tracking, coalesced to one animation frame. `mousemove` fires several times
-    between paints, and each event was doing a `getBoundingClientRect()` (forced synchronous
-    layout) then a setState that re-rendered the whole ledger — including the screenshot
-    parallax. Read-then-write interleaved across events also thrashes layout. This fires during
-    scrolling too, whenever the pointer rests on the stage.
+    Cursor tracking on the media viewport, coalesced to one animation frame. `mousemove` fires
+    several times between paints, and each event was doing a `getBoundingClientRect()` (forced
+    synchronous layout) then a setState that re-rendered the whole ledger — including the
+    screenshot parallax. Read-then-write interleaved across events also thrashes layout, and this
+    fires during scrolling too, whenever the pointer rests on the panel.
+
+    It measures the viewport rather than the whole card, so the parallax and the spotlight are
+    both expressed as a fraction of the media box and stay correct at any column width.
   */
-  const stageRef = useRef<HTMLDivElement>(null);
-  const stagePointer = useRef({ x: 0, y: 0 });
-  const stageFrame = useRef(0);
+  const mediaRef = useRef<HTMLDivElement>(null);
+  const pointerRaw = useRef({ x: 0, y: 0 });
+  const frame = useRef(0);
 
   useEffect(() => () => {
-    if (stageFrame.current) cancelAnimationFrame(stageFrame.current);
+    if (frame.current) cancelAnimationFrame(frame.current);
   }, []);
 
-  const trackStage = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    stagePointer.current.x = e.clientX;
-    stagePointer.current.y = e.clientY;
-    if (stageFrame.current) return;
-    stageFrame.current = requestAnimationFrame(() => {
-      stageFrame.current = 0;
-      const node = stageRef.current;
+  const trackMedia = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    pointerRaw.current.x = e.clientX;
+    pointerRaw.current.y = e.clientY;
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const node = mediaRef.current;
       if (!node) return;
       const r = node.getBoundingClientRect();
-      setStageMouse({ x: stagePointer.current.x - r.left, y: stagePointer.current.y - r.top });
+      setPointer({
+        x: pointerRaw.current.x - r.left,
+        y: pointerRaw.current.y - r.top,
+        w: r.width || 1,
+        h: r.height || 1
+      });
     });
   }, []);
 
-  const leaveStage = useCallback(() => {
-    if (stageFrame.current) {
-      cancelAnimationFrame(stageFrame.current);
-      stageFrame.current = 0;
+  const leaveMedia = useCallback(() => {
+    if (frame.current) {
+      cancelAnimationFrame(frame.current);
+      frame.current = 0;
     }
-    setStageMouse(null);
+    setPointer(null);
   }, []);
 
   const tiers = useMemo(
@@ -175,19 +201,14 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
   return (
     <section
       id="work-ledger"
-      className="relative isolate overflow-hidden bg-[#070A18] py-20 sm:py-24 font-body text-slate-200"
+      className="relative isolate overflow-hidden border-y border-slate-200/70 bg-gradient-to-b from-[#F7F8FF] via-white to-[#F7F8FF] py-12 font-body text-slate-900 sm:py-14"
     >
-      {/* Plate edges: a hairline and a short lift at the top so the dark band has a lid. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-white/[0.14]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-[#101736] to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-white/[0.08]" />
-
-      {/* Ambient brand aurora, plus a cross-fading blob in the active project's own accent.
-          Both are gradients, not blurred discs — see `softGlow`. The boxes are 2.5x the old
-          520/560px and pulled back by R + 3σ so the glow sits in exactly the same place. */}
+      {/* Ambient brand wash, plus a cross-fading one in the active project's own accent. Both are
+          gradients rather than blurred discs — see `softGlow` — and both are pitched low enough
+          to read as a tint on white rather than a coloured cloud. */}
       <div
-        className="pointer-events-none absolute left-[-550px] top-1/3 -mt-[390px] h-[1300px] w-[1300px]"
-        style={{ background: softGlow(FALLBACK_ACCENT, 0.13) }}
+        className="pointer-events-none absolute left-[-500px] top-[-360px] h-[1200px] w-[1200px]"
+        style={{ background: softGlow(FALLBACK_ACCENT, 0.07) }}
       />
       <AnimatePresence mode="sync">
         <motion.div
@@ -196,35 +217,41 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.8 }}
-          className="pointer-events-none absolute right-[-548px] top-1/4 -mt-[420px] h-[1400px] w-[1400px]"
-          style={{ background: softGlow(accent, 0.17) }}
+          className="pointer-events-none absolute right-[-520px] top-[-300px] h-[1240px] w-[1240px]"
+          style={{ background: softGlow(accent, 0.08) }}
         />
       </AnimatePresence>
 
       <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         {/* ── Header ─────────────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="flex items-center gap-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.28em] text-[#8B93FF]">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-xl">
+            <p className="flex items-center gap-3 font-mono text-[10.5px] font-bold uppercase tracking-[0.28em] text-[#5B61FE]">
               <span>Selected work</span>
-              <span className="h-px w-8 bg-white/20" />
-              <span className="text-slate-500">{projects.length} projects</span>
+              <span className="h-px w-8 bg-slate-300" />
+              <span className="text-slate-400">{projects.length} projects</span>
             </p>
-            <h2 className="mt-4 text-4xl font-black leading-[1.02] tracking-[-0.03em] text-white sm:text-5xl lg:text-[3.5rem]">
+            {/*
+              Same steps as the services section's h2 (`lg:text-[2.6rem] xl:text-[2.9rem]`), which
+              is this heading's nearest neighbour in the page rhythm. It is smaller than the old
+              56px, but matching an existing section beats inventing a size — the page already
+              runs 46–60px for its display headings.
+            */}
+            <h2 className="mt-3 text-3xl font-black leading-[1.04] tracking-[-0.03em] text-slate-900 sm:text-4xl lg:text-[2.6rem] xl:text-[2.9rem]">
               The work, and the{' '}
-              <span className="italic text-[#A5B4FC]" style={{ fontFamily: 'var(--font-heading)' }}>
+              <span className="italic text-[#5B61FE]" style={{ fontFamily: 'var(--font-heading)' }}>
                 evidence
               </span>{' '}
               for it.
             </h2>
-            <p className="mt-5 max-w-xl text-sm leading-relaxed text-slate-400 sm:text-[15px]">
-              {deployedCount} of these are running in production and open from this panel.{' '}
-              {sourceCount} ship as readable source. Every entry states what the build proves, and
+            <p className="mt-3.5 text-sm leading-relaxed text-slate-600">
+              {deployedCount} are running in production and open straight from this panel.{' '}
+              {sourceCount} ship as readable source — every entry says what the build proves, and
               what it does not prove yet.
             </p>
           </div>
 
-          <div className="flex flex-col items-start gap-4 lg:items-end">
+          <div className="flex flex-col items-start gap-3 lg:items-end">
             {/* The evidence legend is the filter. Hovering it dims everything on the other tier. */}
             <div className="flex flex-wrap items-center gap-2">
               {tiers.map(({ tier: t, count }) => {
@@ -242,18 +269,16 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                     onClick={() => toggleFilter(t)}
                     aria-pressed={isOn}
                     title={EVIDENCE_META[t].note}
-                    className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3.5 py-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/50"
                     style={{
-                      borderColor: isOn ? hexA(ui.color, 0.6) : 'rgba(255,255,255,0.12)',
-                      backgroundColor: isOn ? hexA(ui.color, 0.12) : 'rgba(255,255,255,0.03)',
-                      color: isOn ? ui.color : '#94A3B8'
+                      borderColor: isOn ? ui.lightBorder : '#E2E8F0',
+                      backgroundColor: isOn ? ui.lightBg : '#FFFFFF',
+                      color: isOn ? ui.onLight : '#64748B'
                     }}
                   >
-                    <Icon className="h-3.5 w-3.5" style={{ color: ui.color }} />
+                    <Icon className="h-3.5 w-3.5" style={{ color: isOn ? ui.onLight : '#94A3B8' }} />
                     <span>{EVIDENCE_META[t].label}</span>
-                    <span className="tabular-nums" style={{ color: hexA(ui.color, 0.75) }}>
-                      {count}
-                    </span>
+                    <span className="tabular-nums opacity-60">{count}</span>
                   </button>
                 );
               })}
@@ -261,7 +286,7 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                 <button
                   type="button"
                   onClick={() => toggleFilter(filterTier)}
-                  className="cursor-pointer rounded-full px-2.5 py-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                  className="cursor-pointer rounded-full px-2.5 py-1.5 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] text-slate-400 transition-colors hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/50"
                 >
                   Clear
                 </button>
@@ -271,7 +296,7 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
             <button
               type="button"
               onClick={() => onNavigate('work')}
-              className="group inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold text-[#A5B4FC] transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+              className="group inline-flex cursor-pointer items-center gap-1.5 text-xs font-bold text-[#5B61FE] transition-colors hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/50"
             >
               <span>Open the full index</span>
               <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -279,107 +304,92 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* ── Body ───────────────────────────────────────────────────────────── */}
+        {/* ── Index pager ────────────────────────────────────────────────────────
+            A row of project numbers, not a list of names. Thirteen names either wrap into a
+            block as tall as the stage or hide inside a scroller; thirteen numbers fit on one
+            line, and the tick under each one is its evidence tier — so the pager doubles as a
+            map of the mix, and the legend's hover-dim lands on it. The dossier is the readout. */}
         <div
-          className="mt-12 grid grid-cols-1 gap-6 lg:mt-14 lg:grid-cols-12 lg:gap-8"
+          className="mt-7 flex items-center gap-3"
           onMouseEnter={() => setPaused(true)}
           onMouseLeave={() => setPaused(false)}
         >
-          {/* Index rail — vertical on desktop, a scrolling strip on mobile. */}
-          <div className="lg:col-span-3">
-            <p className="mb-3 hidden font-mono text-[9.5px] font-bold uppercase tracking-[0.22em] text-slate-500 lg:block">
-              Index
-            </p>
-            <div
-              role="listbox"
-              aria-label="Project index"
-              tabIndex={-1}
-              onKeyDown={onRailKeyDown}
-              className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0"
-            >
-              {visible.map((p, i) => {
-                const isActive = p.id === active.id;
-                const rowAccent = p.accent || FALLBACK_ACCENT;
-                return (
-                  <button
-                    key={p.id}
-                    ref={(el) => {
-                      railRefs.current[i] = el;
-                    }}
-                    type="button"
-                    role="option"
-                    aria-selected={isActive}
-                    onMouseEnter={() => setActiveId(p.id)}
-                    onFocus={() => setActiveId(p.id)}
-                    onClick={() => select(p.id)}
-                    className="group relative shrink-0 cursor-pointer overflow-hidden rounded-lg px-3 py-2 text-left transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 lg:w-full lg:px-3"
+          <span className="hidden shrink-0 font-mono text-[9.5px] font-bold uppercase tracking-[0.2em] text-slate-400 sm:block">
+            Index
+          </span>
+          <div
+            role="listbox"
+            aria-label="Project index"
+            tabIndex={-1}
+            onKeyDown={onRailKeyDown}
+            className="-mx-4 flex flex-1 gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+          >
+            {visible.map((p, i) => {
+              const isActive = p.id === active.id;
+              const rowAccent = p.accent || FALLBACK_ACCENT;
+              const rowTier = TIER_UI[p.evidence ?? 'reconstructed'];
+              return (
+                <button
+                  key={p.id}
+                  ref={(el) => {
+                    railRefs.current[i] = el;
+                  }}
+                  type="button"
+                  role="option"
+                  aria-selected={isActive}
+                  aria-label={`${p.client} — ${p.category}`}
+                  title={`${p.client} · ${p.category}`}
+                  onMouseEnter={() => setActiveId(p.id)}
+                  onFocus={() => setActiveId(p.id)}
+                  onClick={() => select(p.id)}
+                  className="group flex shrink-0 cursor-pointer flex-col items-center gap-1.5 rounded-xl transition-transform duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/50"
+                  style={{ opacity: dimmedByLegend(p) ? 0.28 : 1 }}
+                >
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white font-mono text-[11px] font-bold tabular-nums transition-[color,border-color,box-shadow] duration-200"
                     style={{
-                      backgroundColor: isActive ? 'rgba(255,255,255,0.055)' : 'transparent',
-                      opacity: dimmedByLegend(p) ? 0.22 : 1
+                      borderColor: isActive ? hexA(rowAccent, 0.5) : '#E2E8F0',
+                      color: isActive ? rowAccent : '#94A3B8',
+                      boxShadow: isActive
+                        ? `0 10px 22px -12px ${hexA(rowAccent, 0.85)}`
+                        : '0 1px 2px rgba(15,23,42,0.04)'
                     }}
                   >
-                    {/* Active marker: a bar in the project's own accent. */}
-                    <span
-                      className="absolute bottom-0 left-0 h-[2px] w-full origin-left transition-transform duration-300 lg:bottom-auto lg:left-0 lg:top-0 lg:h-full lg:w-[2px] lg:origin-top"
-                      style={{
-                        background: rowAccent,
-                        transform: isActive ? 'scale(1)' : 'scaleX(0)'
-                      }}
-                    />
-                    <span className="flex items-baseline gap-2.5">
-                      <span
-                        className="font-mono text-[10px] font-bold tabular-nums transition-colors"
-                        style={{ color: isActive ? rowAccent : '#64748B' }}
-                      >
-                        {p.number ?? String(i + 1).padStart(2, '0')}
-                      </span>
-                      <span
-                        className={`whitespace-nowrap text-[13px] font-bold transition-colors lg:whitespace-normal ${
-                          isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-200'
-                        }`}
-                      >
-                        {p.client}
-                      </span>
-                    </span>
-                    <span className="mt-0.5 hidden font-mono text-[9.5px] uppercase tracking-[0.14em] text-slate-600 lg:block">
-                      {p.category}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                    {p.number ?? String(i + 1).padStart(2, '0')}
+                  </span>
+                  {/* Evidence tick — widens on the active project. */}
+                  <span
+                    className="h-[2px] rounded-full transition-all duration-300"
+                    style={{
+                      background: rowTier.onLight,
+                      width: isActive ? '1.5rem' : '0.625rem',
+                      opacity: isActive ? 1 : 0.4
+                    }}
+                  />
+                </button>
+              );
+            })}
           </div>
+        </div>
 
-          {/* Stage + dossier */}
-          <div className="lg:col-span-9">
-            {/* ── Stage ──────────────────────────────────────────────────────── */}
+        {/* ── Body: the project on the left, the evidence for it on the right ─── */}
+        <div
+          className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-12 lg:gap-8"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+        >
+          {/* ── Stage ────────────────────────────────────────────────────────── */}
+          <div className="lg:col-span-7">
             <div
-              ref={stageRef}
-              className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035] backdrop-blur-md transition-shadow duration-700"
-              style={{ boxShadow: `0 40px 110px -45px ${hexA(accent, 0.45)}` }}
-              onMouseMove={trackStage}
-              onMouseLeave={leaveStage}
+              className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white transition-shadow duration-700"
+              style={{ boxShadow: `0 28px 70px -30px ${hexA(accent, 0.35)}, 0 2px 6px rgba(15,23,42,0.05)` }}
             >
-              {/* Hairline highlight along the top edge of the glass. */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-
-              {/* Cursor spotlight in the active accent. */}
-              <div
-                className="pointer-events-none absolute z-20 h-[420px] w-[420px] rounded-full transition-opacity duration-500"
-                style={{
-                  background: `radial-gradient(circle, ${hexA(accent, 0.13)} 0%, transparent 70%)`,
-                  left: `${(stageMouse?.x ?? 0) - 210}px`,
-                  top: `${(stageMouse?.y ?? 0) - 210}px`,
-                  opacity: stageMouse ? 1 : 0
-                }}
-              />
-
               {/* Chrome bar: the citation, live and clickable. */}
-              <div className="relative z-10 flex items-center gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-2.5">
+              <div className="flex items-center gap-3 border-b border-slate-200/80 bg-slate-50/70 px-4 py-2.5">
                 <span className="flex shrink-0 gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-white/20" />
-                  <span className="h-2 w-2 rounded-full bg-white/15" />
-                  <span className="h-2 w-2 rounded-full bg-white/10" />
+                  <span className="h-2 w-2 rounded-full bg-slate-300" />
+                  <span className="h-2 w-2 rounded-full bg-slate-200" />
+                  <span className="h-2 w-2 rounded-full bg-slate-100" />
                 </span>
 
                 {citation.href ? (
@@ -388,18 +398,18 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                     target="_blank"
                     rel="noreferrer noopener"
                     title={citation.href}
-                    className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 font-mono text-[11px] text-slate-300 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
+                    className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 font-mono text-[11px] text-slate-500 transition-colors hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/50"
                   >
                     <span
                       className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: tierUi.color, boxShadow: `0 0 8px ${tierUi.color}` }}
+                      style={{ background: tierUi.onLight }}
                     />
                     <span className="truncate">{citation.label}</span>
                     <ArrowUpRight className="h-3 w-3 shrink-0 opacity-40 transition-opacity group-hover:opacity-100" />
                   </a>
                 ) : (
-                  <span className="flex min-w-0 items-center gap-2 px-2 py-1 font-mono text-[11px] text-slate-500">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-600" />
+                  <span className="flex min-w-0 items-center gap-2 px-2 py-1 font-mono text-[11px] text-slate-400">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
                     <span className="truncate">{citation.label}</span>
                   </span>
                 )}
@@ -407,9 +417,9 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                 <span
                   className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em]"
                   style={{
-                    borderColor: hexA(tierUi.color, 0.35),
-                    backgroundColor: hexA(tierUi.color, 0.1),
-                    color: tierUi.color
+                    borderColor: tierUi.lightBorder,
+                    backgroundColor: tierUi.lightBg,
+                    color: tierUi.onLight
                   }}
                   title={EVIDENCE_META[tier].note}
                 >
@@ -419,8 +429,14 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                 </span>
               </div>
 
-              {/* Viewport: a real screenshot where one exists, the architecture where it doesn't. */}
-              <div className="relative aspect-[16/10] w-full overflow-hidden bg-[#05070F]">
+              {/* Viewport. The one dark surface in the section: a screenshot where one exists,
+                  the architecture where there is no interface to photograph. */}
+              <div
+                ref={mediaRef}
+                className="relative aspect-[16/10] w-full overflow-hidden bg-[#070A18]"
+                onMouseMove={trackMedia}
+                onMouseLeave={leaveMedia}
+              >
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={active.id}
@@ -439,9 +455,9 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                           decoding="async"
                           className="h-full w-full object-cover object-top"
                           style={{
-                            transform: stageMouse
-                              ? `scale(1.045) translate3d(${((stageMouse.x / 900) - 0.5) * -14}px, ${
-                                  ((stageMouse.y / 560) - 0.5) * -10
+                            transform: pointer
+                              ? `scale(1.045) translate3d(${((pointer.x / pointer.w) - 0.5) * -14}px, ${
+                                  ((pointer.y / pointer.h) - 0.5) * -10
                                 }px, 0)`
                               : 'scale(1.02)',
                             transition: 'transform 400ms cubic-bezier(0.22,1,0.36,1)'
@@ -473,10 +489,24 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                     )}
                   </motion.div>
                 </AnimatePresence>
+
+                {/* Cursor spotlight in the active accent — inside the screen, where a warm glow
+                    over near-black reads as light rather than as a smudge on white. */}
+                <div
+                  className="pointer-events-none absolute z-20 h-[360px] w-[360px] rounded-full transition-opacity duration-500"
+                  style={{
+                    background: `radial-gradient(circle, ${hexA(accent, 0.16)} 0%, transparent 70%)`,
+                    left: `${(pointer?.x ?? 0) - 180}px`,
+                    top: `${(pointer?.y ?? 0) - 180}px`,
+                    opacity: pointer ? 1 : 0
+                  }}
+                />
               </div>
             </div>
+          </div>
 
-            {/* ── Dossier ────────────────────────────────────────────────────── */}
+          {/* ── Dossier ──────────────────────────────────────────────────────── */}
+          <div className="lg:col-span-5">
             <AnimatePresence mode="wait">
               <motion.div
                 key={active.id}
@@ -484,83 +514,77 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: reduced ? 0 : -6 }}
                 transition={{ duration: reduced ? 0 : 0.3 }}
-                className="mt-7"
               >
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                   <span className="font-mono text-[11px] font-bold tabular-nums" style={{ color: accent }}>
                     {active.number ?? '--'}
-                    <span className="text-slate-600"> / {String(projects.length).padStart(2, '0')}</span>
+                    <span className="text-slate-400"> / {String(projects.length).padStart(2, '0')}</span>
                   </span>
-                  <h3 className="text-2xl font-black tracking-[-0.02em] text-white sm:text-[1.75rem]">
+                  <h3 className="text-2xl font-black tracking-[-0.02em] text-slate-900">
                     {active.client}
                   </h3>
-                  <span className="text-lg font-medium text-slate-400 sm:text-xl">{active.title}</span>
                 </div>
-                <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <p className="mt-1 text-[15px] font-medium text-slate-500">{active.title}</p>
+                <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
                   {active.industry}
                 </p>
 
-                <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-5 sm:gap-8">
-                  <div className="sm:col-span-3">
-                    <p className="text-[14px] leading-relaxed text-slate-300">{active.summary}</p>
-                    <ul className="mt-5 space-y-2.5">
-                      {active.results.map((r) => (
-                        <li key={r} className="flex gap-3">
-                          <span
-                            className="mt-[9px] h-[2px] w-3.5 shrink-0 rounded-full"
-                            style={{ background: accent }}
-                          />
-                          <span className="text-[13px] leading-relaxed text-slate-400">{r}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                <p className="mt-4 text-[13.5px] leading-relaxed text-slate-600">{active.summary}</p>
 
-                  <div className="sm:col-span-2 space-y-4">
-                    {active.maturity && (
-                      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5">
-                        <p className="mb-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                          Scope
-                        </p>
-                        <p className="text-[12px] leading-relaxed text-slate-400">{active.maturity}</p>
-                      </div>
-                    )}
+                <ul className="mt-4 space-y-2">
+                  {active.results.map((r) => (
+                    <li key={r} className="flex gap-3">
+                      <span
+                        className="mt-[9px] h-[2px] w-3.5 shrink-0 rounded-full"
+                        style={{ background: accent }}
+                      />
+                      <span className="text-[13px] leading-relaxed text-slate-500">{r}</span>
+                    </li>
+                  ))}
+                </ul>
 
-                    {active.stack && active.stack.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {active.stack.map((s) => {
-                          const lit = revealedStack.has(s.name);
-                          return (
-                            <span
-                              key={s.name}
-                              title={`${s.name} - ${s.layer}`}
-                              className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] transition-[color,background-color,border-color,box-shadow] duration-300"
-                              style={{
-                                borderColor: lit ? hexA(accent, 0.55) : 'rgba(255,255,255,0.1)',
-                                backgroundColor: lit ? hexA(accent, 0.12) : 'rgba(255,255,255,0.025)',
-                                color: lit ? '#FFFFFF' : '#94A3B8',
-                                boxShadow: lit ? `0 0 14px -2px ${hexA(accent, 0.5)}` : 'none'
-                              }}
-                            >
-                              <span className="font-bold">{s.name}</span>
-                              <span className="text-[8.5px] uppercase tracking-[0.1em] opacity-55">
-                                {s.layer}
-                              </span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
+                {active.maturity && (
+                  <div className="mt-4 rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-[0_2px_6px_rgba(15,23,42,0.04)]">
+                    <p className="mb-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">
+                      Scope
+                    </p>
+                    <p className="text-[12px] leading-relaxed text-slate-500">{active.maturity}</p>
                   </div>
-                </div>
+                )}
+
+                {active.stack && active.stack.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {active.stack.map((s) => {
+                      const lit = revealedStack.has(s.name);
+                      return (
+                        <span
+                          key={s.name}
+                          title={`${s.name} - ${s.layer}`}
+                          className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] transition-[color,background-color,border-color,box-shadow] duration-300"
+                          style={{
+                            borderColor: lit ? hexA(accent, 0.45) : '#E2E8F0',
+                            backgroundColor: lit ? hexA(accent, 0.08) : '#FFFFFF',
+                            color: lit ? accent : '#64748B',
+                            boxShadow: lit ? `0 6px 16px -8px ${hexA(accent, 0.6)}` : 'none'
+                          }}
+                        >
+                          <span className="font-bold">{s.name}</span>
+                          <span className="text-[8.5px] uppercase tracking-[0.1em] opacity-55">
+                            {s.layer}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Actions */}
-                <div className="mt-7 flex flex-wrap items-center gap-2.5 border-t border-white/[0.08] pt-6">
+                <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200/80 pt-4">
                   <button
                     type="button"
                     onClick={() => onNavigate('project-detail', active.id)}
-                    className="group inline-flex cursor-pointer items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-bold text-white transition-transform duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                    style={{ backgroundColor: accent, boxShadow: `0 10px 30px -12px ${hexA(accent, 0.9)}` }}
+                    className="group inline-flex cursor-pointer items-center gap-2 rounded-xl px-4 py-2.5 text-[13px] font-bold text-white transition-transform duration-200 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#5B61FE]/60"
+                    style={{ backgroundColor: accent, boxShadow: `0 12px 28px -12px ${hexA(accent, 0.75)}` }}
                   >
                     <span>Read the case study</span>
                     <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -575,11 +599,11 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                       }}
                       aria-expanded={buildOpen}
                       aria-controls="build-sequence-panel"
-                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 font-mono text-[11.5px] font-bold uppercase tracking-[0.1em] text-slate-300 transition-colors hover:border-white/25 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/60"
                     >
                       <Terminal className="h-3.5 w-3.5" style={{ color: accent }} />
-                      <span>Build sequence</span>
-                      <span className="tabular-nums text-slate-500">{steps.length}</span>
+                      <span>Build</span>
+                      <span className="tabular-nums text-slate-400">{steps.length}</span>
                       <ChevronDown
                         className="h-3.5 w-3.5 transition-transform duration-300"
                         style={{ transform: buildOpen ? 'rotate(180deg)' : 'none' }}
@@ -592,99 +616,101 @@ export const WorkLedger: React.FC<WorkLedgerProps> = ({ onNavigate }) => {
                       href={citation.href}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-[12.5px] font-bold text-slate-400 transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      className="inline-flex items-center gap-1.5 rounded-xl px-2 py-2.5 text-[12.5px] font-bold text-slate-400 transition-colors hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5B61FE]/60"
                     >
-                      <span>{active.liveUrl ? 'Open the live build' : 'Read the source'}</span>
+                      <span>{active.liveUrl ? 'Live build' : 'Source'}</span>
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </a>
                   )}
                 </div>
               </motion.div>
             </AnimatePresence>
-
-            {/* ── Build sequence: the payoff, one true step at a time ─────────── */}
-            <AnimatePresence initial={false}>
-              {buildOpen && steps.length > 0 && (
-                <motion.div
-                  id="build-sequence-panel"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: reduced ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
-                  className="overflow-hidden"
-                >
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-[#04060E]/85 p-4 backdrop-blur-sm sm:p-6">
-                    <div className="mb-5 flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
-                      <Terminal className="h-3.5 w-3.5" style={{ color: accent }} />
-                      <span>build sequence</span>
-                      <span className="h-px flex-1 bg-white/[0.08]" />
-                      <span className="tabular-nums" style={{ color: accent }}>
-                        {String(Math.min(revealed, steps.length)).padStart(2, '0')}
-                      </span>
-                      <span className="tabular-nums text-slate-600">
-                        / {String(steps.length).padStart(2, '0')}
-                      </span>
-                    </div>
-
-                    <div className="relative pl-8">
-                      {/* Spine, and the segment already walked. */}
-                      <span className="absolute bottom-1 left-[7px] top-1 w-px bg-white/[0.09]" />
-                      <motion.span
-                        className="absolute left-[7px] top-1 w-px"
-                        style={{ background: accent }}
-                        animate={{ height: `${(Math.min(revealed, steps.length) / steps.length) * 100}%` }}
-                        transition={{ duration: reduced ? 0 : 0.3 }}
-                      />
-
-                      <ol className="space-y-5">
-                        {steps.map((step, i) => {
-                          const shown = i < revealed;
-                          return (
-                            <motion.li
-                              key={`${active.id}-${step.title}`}
-                              className="relative"
-                              animate={{ opacity: shown ? 1 : 0.2, x: shown ? 0 : -4 }}
-                              transition={{ duration: reduced ? 0 : 0.3 }}
-                            >
-                              <span
-                                className="absolute -left-8 top-[6px] h-[15px] w-[15px] rounded-full border-2 transition-[background-color,border-color,box-shadow] duration-300"
-                                style={{
-                                  borderColor: shown ? accent : 'rgba(255,255,255,0.18)',
-                                  backgroundColor: shown ? accent : '#04060E',
-                                  boxShadow: shown ? `0 0 12px ${hexA(accent, 0.75)}` : 'none'
-                                }}
-                              />
-                              <div className="flex flex-wrap items-baseline gap-x-2.5">
-                                <span className="font-mono text-[10px] font-bold tabular-nums text-slate-600">
-                                  {String(i + 1).padStart(2, '0')}
-                                </span>
-                                <h4 className="text-[13.5px] font-bold text-white">{step.title}</h4>
-                                {step.stack && (
-                                  <span
-                                    className="rounded-full border px-2 py-[1px] font-mono text-[9px] uppercase tracking-[0.1em] transition-colors duration-300"
-                                    style={{
-                                      borderColor: shown ? hexA(accent, 0.5) : 'rgba(255,255,255,0.1)',
-                                      color: shown ? accent : '#64748B'
-                                    }}
-                                  >
-                                    {step.stack}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-slate-400">
-                                {step.detail}
-                              </p>
-                            </motion.li>
-                          );
-                        })}
-                      </ol>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
         </div>
+
+        {/* ── Build sequence: opt-in, so it costs the section no resting height ── */}
+        <AnimatePresence initial={false}>
+          {buildOpen && steps.length > 0 && (
+            <motion.div
+              id="build-sequence-panel"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: reduced ? 0 : 0.4, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden"
+            >
+              <div className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_18px_44px_-24px_rgba(15,23,42,0.14)] sm:p-6">
+                <div className="mb-5 flex items-center gap-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                  <Terminal className="h-3.5 w-3.5" style={{ color: accent }} />
+                  <span>build sequence</span>
+                  <span className="h-px flex-1 bg-slate-200" />
+                  <span className="tabular-nums" style={{ color: accent }}>
+                    {String(Math.min(revealed, steps.length)).padStart(2, '0')}
+                  </span>
+                  <span className="tabular-nums text-slate-300">
+                    / {String(steps.length).padStart(2, '0')}
+                  </span>
+                </div>
+
+                {/* Single column on purpose: the spine is only honest if the steps run in one
+                    order, and this panel is opt-in, so its height costs the section nothing. */}
+                <div className="relative pl-8">
+                  {/* Spine, and the segment already walked. */}
+                  <span className="absolute bottom-1 left-[7px] top-1 w-px bg-slate-200" />
+                  <motion.span
+                    className="absolute left-[7px] top-1 w-px"
+                    style={{ background: accent }}
+                    animate={{ height: `${(Math.min(revealed, steps.length) / steps.length) * 100}%` }}
+                    transition={{ duration: reduced ? 0 : 0.3 }}
+                  />
+
+                  <ol className="space-y-4">
+                    {steps.map((step, i) => {
+                      const shown = i < revealed;
+                      return (
+                        <motion.li
+                          key={`${active.id}-${step.title}`}
+                          className="relative"
+                          animate={{ opacity: shown ? 1 : 0.25, x: shown ? 0 : -4 }}
+                          transition={{ duration: reduced ? 0 : 0.3 }}
+                        >
+                          <span
+                            className="absolute -left-8 top-[6px] h-[15px] w-[15px] rounded-full border-2 transition-[background-color,border-color,box-shadow] duration-300"
+                            style={{
+                              borderColor: shown ? accent : '#E2E8F0',
+                              backgroundColor: shown ? accent : '#FFFFFF',
+                              boxShadow: shown ? `0 0 0 4px ${hexA(accent, 0.12)}` : 'none'
+                            }}
+                          />
+                          <div className="flex flex-wrap items-baseline gap-x-2.5">
+                            <span className="font-mono text-[10px] font-bold tabular-nums text-slate-300">
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                            <h4 className="text-[13.5px] font-bold text-slate-900">{step.title}</h4>
+                            {step.stack && (
+                              <span
+                                className="rounded-full border px-2 py-[1px] font-mono text-[9px] uppercase tracking-[0.1em] transition-colors duration-300"
+                                style={{
+                                  borderColor: shown ? hexA(accent, 0.4) : '#E2E8F0',
+                                  color: shown ? accent : '#94A3B8'
+                                }}
+                              >
+                                {step.stack}
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 max-w-3xl text-[12.5px] leading-relaxed text-slate-500">
+                            {step.detail}
+                          </p>
+                        </motion.li>
+                      );
+                    })}
+                  </ol>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </section>
   );

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, type Transition } from 'motion/react';
 
 /*
-  Shared primitives for the two new hero compositions (HeroCentered, HeroSpotlight).
+  Shared primitives for the hero composition (HeroCentered).
 
   Every decorative element here is drawn with SVG or a CSS gradient — never `filter: blur()`.
   The site-wide scroll pass removed every blur filter from the page because each one forces its
@@ -218,13 +218,14 @@ export const FloatCard: React.FC<{
   className?: string;
   delay?: number;
   hoverLift?: boolean;
-}> = ({ children, className = '', delay = 0, hoverLift = true }) => (
+  pad?: string;
+}> = ({ children, className = '', delay = 0, hoverLift = true, pad = 'p-3.5' }) => (
   <motion.div
     initial={{ opacity: 0, y: 14, scale: 0.97 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
     transition={{ duration: 0.55, delay, ease: EASE_OUT }}
     whileHover={hoverLift ? { y: -4 } : undefined}
-    className={`rounded-2xl border border-slate-200/70 bg-white p-3.5 shadow-[0_18px_44px_-20px_rgba(17,24,39,0.18)] transition-shadow duration-300 hover:shadow-[0_26px_60px_-22px_rgba(17,24,39,0.24)] ${className}`}
+    className={`rounded-2xl border border-slate-200/70 bg-white ${pad} shadow-[0_18px_44px_-20px_rgba(17,24,39,0.18)] transition-shadow duration-300 hover:shadow-[0_26px_60px_-22px_rgba(17,24,39,0.24)] ${className}`}
   >
     {children}
   </motion.div>

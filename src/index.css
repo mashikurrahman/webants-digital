@@ -121,3 +121,31 @@
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+/*
+  Centered-hero fit.
+
+  The hero's collage has a hard height floor — the browser-frame board can only get so small
+  before its numbers stop being readable — so viewport-relative type and gaps get it onto a
+  1080p screen but not onto a 1366x768 laptop. `zoom` is the one property that scales a subtree
+  *and* the space it occupies, so a single lever shrinks the whole composition proportionally
+  instead of distorting one axis of it.
+
+  The ranges are deliberately non-overlapping: two overlapping `max-height` rules would leave the
+  winner up to source order, which Tailwind's arbitrary-variant sorting does not guarantee. Only
+  applied from the lg breakpoint, where the cards float and one-viewport fit is the goal; below
+  that the section is an ordinary stacked scroll. Browsers without `zoom` simply get the
+  tall-screen layout, which is the design's own baseline.
+*/
+@media (min-width: 1024px) and (max-height: 880px) and (min-height: 801px) {
+  .hero-fit { zoom: 0.93; }
+}
+@media (min-width: 1024px) and (max-height: 800px) and (min-height: 741px) {
+  .hero-fit { zoom: 0.87; }
+}
+@media (min-width: 1024px) and (max-height: 740px) and (min-height: 681px) {
+  .hero-fit { zoom: 0.8; }
+}
+@media (min-width: 1024px) and (max-height: 680px) {
+  .hero-fit { zoom: 0.73; }
+}
