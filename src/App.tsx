@@ -54,9 +54,9 @@ export default function App() {
     */
     const lenis = new Lenis({
       autoRaf: true,
-      lerp: 0.14, // ~7.5ms half-life: locks to the wheel without feeling stiff
+      lerp: 0.08,  // Lower = snappier, less interpolation lag
       smoothWheel: true,
-      wheelMultiplier: 1.15, // travel per notch; higher reads as "fast", not "smooth"
+      wheelMultiplier: 1.0, // Neutral: no amplification, just smooth interpolation
       // Touch stays native: mobile inertia already runs on the compositor at 120Hz,
       // and syncTouch would move it onto the main thread for a worse result.
       syncTouch: false,

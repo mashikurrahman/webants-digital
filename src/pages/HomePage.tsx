@@ -9,6 +9,7 @@ import { KokonutServicesSection } from '../components/kokonutui/card-stack';
 import { VideoTestimonialsSection } from '../components/VideoTestimonialsSection';
 import { IntegrationFlowCta } from '../components/IntegrationFlowCta';
 import { WorkLedger } from '../components/WorkLedger';
+import { ProjectsBentoGrid } from '../components/ProjectsBentoGrid';
 import { HeroCentered } from '../components/hero/HeroCentered';
 
 
@@ -143,8 +144,8 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenBookCall, 
         </div>
       </section>
 
-      {/* ─── 7. SELECTED WORK & THE EVIDENCE FOR IT ─── */}
-      <WorkLedger onNavigate={onNavigate} />
+      {/* ─── 7. SELECTED WORK: BENTO GRID ─── */}
+      <ProjectsBentoGrid onNavigate={onNavigate} />
 
       {/* ─── 8. 5-STEP DELIVERY PROCESS ─── */}
       <ProcessSection />

@@ -55,6 +55,38 @@
   }
 }
 
+/* ─── SCROLL PERFORMANCE ──────────────────────────────────────────────────── */
+
+/*
+  Promote every backdrop-blur element to its own GPU layer so the blur filter
+  runs composited instead of re-rasterising on every scroll frame.
+*/
+[class*="backdrop-blur"] {
+  will-change: transform;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/*
+  content-visibility: auto lets the browser skip layout, paint, and style for
+  sections that are far off-screen, dramatically cutting per-frame work during
+  fast scrolling. contain-intrinsic-size gives the browser a size estimate so
+  the scrollbar height stays stable.
+*/
+section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
+/*
+  GPU-promote images so decode + paint happen on the compositor thread.
+  Combined with loading="lazy" in markup this keeps scroll frames under budget.
+*/
+img {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 /* One honest kill switch. Anything below this respects the visitor's OS setting. */
 @media (prefers-reduced-motion: reduce) {
   *,
